@@ -7,8 +7,12 @@ public class
 RoadsideAssistanceServiceImpl implements RoadsideAssistanceService {
     // Stores all available assistants
     KDTree availableAssistants = new KDTree(2);
+    int maxNodes = 0; // because we can have 2 assistants at the same place, the number of nodes and number of assistants is different
+    // we can only query the maxNodes, not the max available assistants
+
+    // number of available assistances - required because our tree throws errors if you ask for too many answers
     int numAvailable = 0;
-    // Stores all assistants - both reserved and available
+    // Stores all assistants - both reserved and available, can find their current location from their index
     Map<Assistant, Geolocation> allAssistants = new HashMap();
 
     /**
@@ -34,6 +38,7 @@ RoadsideAssistanceServiceImpl implements RoadsideAssistanceService {
 
         if (set.isEmpty()) {
             availableAssistants.delete(location.toDoubleArray());
+            maxNodes--;
         }
         numAvailable--;
     }
@@ -42,10 +47,12 @@ RoadsideAssistanceServiceImpl implements RoadsideAssistanceService {
         List<Assistant> assistantsAtNew = (List<Assistant>) availableAssistants.search(assistantLocation.toDoubleArray());
         if (assistantsAtNew == null) {
             assistantsAtNew = new LinkedList();
+            maxNodes++;
+            availableAssistants.insert(assistantLocation.toDoubleArray(), assistantsAtNew);
         }
-        assistantsAtNew.add(assistant);
         assistant.setLocation(assistantLocation);
-        availableAssistants.insert(assistantLocation.toDoubleArray(), assistantsAtNew);
+        assistantsAtNew.add(assistant);
+
         allAssistants.put(assistant, assistantLocation);
         numAvailable++;
     }
@@ -62,12 +69,18 @@ RoadsideAssistanceServiceImpl implements RoadsideAssistanceService {
         if (limit > numAvailable)
             limit = numAvailable;
 
+        // what is the max number of nodes to bring back - we mith have multiple advisors per node
+        // if we ask for more nodes than in the tree we will get a runtime error
+        int nodesToQuery = limit;
+        if (nodesToQuery > maxNodes)
+            nodesToQuery = maxNodes;
+
         SortedSet<Assistant> result = new TreeSet(new DistanceComparator(geolocation));
 
-        if (limit == 0)
+        if (nodesToQuery == 0)
             return result;
 
-        Object[] assistantArray = availableAssistants.nearest(geolocation.toDoubleArray(), limit);
+        Object[] assistantArray = availableAssistants.nearest(geolocation.toDoubleArray(), nodesToQuery);
         int i = 0;
         for (Object assistantsObj : assistantArray) {
             List<Assistant> assistants = (List<Assistant>)assistantsObj;
@@ -129,6 +142,11 @@ RoadsideAssistanceServiceImpl implements RoadsideAssistanceService {
             Geolocation l2 = o2.getLocation();
             double d1 = distanceFrom.distance(l1);
             double d2 = distanceFrom.distance(l2);
+
+            // If these are the same distance, then just compare on the name, otherwise we won't get both
+            if (d1==d2) {
+                return o1.compareTo(o2);
+            }
             return (int)((d1 - d2)* 100);
         }
     }

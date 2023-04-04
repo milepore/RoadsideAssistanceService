@@ -25,6 +25,18 @@ class RoadsideAssistanceServiceImplTest {
         runTest(advisorOperations);
     }
 
+    /**
+     * Put 2 at same location, ask for 2 back - check for corner case
+     */
+    @Test
+    void allAdvisorsOnSingleNode() {
+        String[][] advisorOperations = {
+                {"update", "a", "0.0", "0.0"},
+                {"update", "b", "0.0", "0.0"},
+                {"nearest", "0.0", "0.0", "2", "2", "a", "b"}
+        };
+        runTest(advisorOperations);
+    }
     /** Make sure we can reserve, release a single advisor
      */
     @Test
@@ -159,44 +171,60 @@ class RoadsideAssistanceServiceImplTest {
         System.out.println("Executing " + operationString(operation));
         String operator = operation[0];
         if (operator.equals("update")) {
-            String assistantName = operation[1];
-            Assistant assistant = assistants.get(assistantName);
-            if (assistant == null) {
-                assistant = new Assistant(assistantName);
-                assistants.put(assistantName, assistant);
-            }
-            double latitude = Double.valueOf(operation[2]);
-            double longitude = Double.valueOf(operation[3]);
-            service.updateAssistantLocation(assistant, new Geolocation(latitude, longitude));
+            doUpdate(service, assistants, operation);
         } else if (operator.equals("nearest")) {
-            double latitude = Double.valueOf(operation[1]);
-            double longitude = Double.valueOf(operation[2]);
-            int numResultsRequested = Integer.valueOf(operation[3]);
-            int numResultsExpected = Integer.valueOf(operation[4]);
-            SortedSet<Assistant> assistantsFound = service.findNearestAssistants(new Geolocation(latitude,longitude), numResultsRequested);
-            assertEquals(numResultsExpected, assistantsFound.size(), operationString(operation));
-            Iterator<Assistant> assistantIterator = assistantsFound.iterator();
-            for (int i = 0 ; i < numResultsExpected;  i++) {
-                Assistant assistant = assistantIterator.next();
-                assertEquals(operation[5+i], assistant.getName(), operationString(operation) + " index " + i);
-            }
+            doNearest(service, operation);
         } else if (operator.equals("reserve")) {
-            double latitude = Double.valueOf(operation[1]);
-            double longitude = Double.valueOf(operation[2]);
-            Geolocation location = new Geolocation(latitude, longitude);
-            String expectedReserve = operation[3];
-            Optional<Assistant> assistant = service.reserveAssistant(customer, location);
-            if (expectedReserve == null) {
-                assertTrue(assistant.isEmpty(),  operationString(operation) + "Expected no reserved agents, got " + assistant);
-            } else {
-                assertFalse(assistant.isEmpty(), operationString(operation) + "Expected reserved agent " + expectedReserve + " got none");
-                assertEquals(expectedReserve, assistant.get().getName());
-            }
+            doReserve(service, operation);
         } else if (operator.equals("release")) {
-            String assistantName = operation[1];
-            Assistant assistant = assistants.get(assistantName);
-            service.releaseAssistant(customer, assistant);
+            doRelease(service, assistants, operation);
         }
+    }
+
+    private void doRelease(RoadsideAssistanceService service, HashMap<String, Assistant> assistants, String[] operation) {
+        String assistantName = operation[1];
+        Assistant assistant = assistants.get(assistantName);
+        service.releaseAssistant(customer, assistant);
+    }
+
+    private void doReserve(RoadsideAssistanceService service, String[] operation) {
+        double latitude = Double.valueOf(operation[1]);
+        double longitude = Double.valueOf(operation[2]);
+        Geolocation location = new Geolocation(latitude, longitude);
+        String expectedReserve = operation[3];
+        Optional<Assistant> assistant = service.reserveAssistant(customer, location);
+        if (expectedReserve == null) {
+            assertTrue(assistant.isEmpty(),  operationString(operation) + "Expected no reserved agents, got " + assistant);
+        } else {
+            assertFalse(assistant.isEmpty(), operationString(operation) + "Expected reserved agent " + expectedReserve + " got none");
+            assertEquals(expectedReserve, assistant.get().getName());
+        }
+    }
+
+    private void doNearest(RoadsideAssistanceService service, String[] operation) {
+        double latitude = Double.valueOf(operation[1]);
+        double longitude = Double.valueOf(operation[2]);
+        int numResultsRequested = Integer.valueOf(operation[3]);
+        int numResultsExpected = Integer.valueOf(operation[4]);
+        SortedSet<Assistant> assistantsFound = service.findNearestAssistants(new Geolocation(latitude,longitude), numResultsRequested);
+        assertEquals(numResultsExpected, assistantsFound.size(), operationString(operation));
+        Iterator<Assistant> assistantIterator = assistantsFound.iterator();
+        for (int i = 0 ; i < numResultsExpected;  i++) {
+            Assistant assistant = assistantIterator.next();
+            assertEquals(operation[5+i], assistant.getName(), operationString(operation) + " index " + i);
+        }
+    }
+
+    private static void doUpdate(RoadsideAssistanceService service, HashMap<String, Assistant> assistants, String[] operation) {
+        String assistantName = operation[1];
+        Assistant assistant = assistants.get(assistantName);
+        if (assistant == null) {
+            assistant = new Assistant(assistantName);
+            assistants.put(assistantName, assistant);
+        }
+        double latitude = Double.valueOf(operation[2]);
+        double longitude = Double.valueOf(operation[3]);
+        service.updateAssistantLocation(assistant, new Geolocation(latitude, longitude));
     }
 
     String operationString(String [] operation) {
